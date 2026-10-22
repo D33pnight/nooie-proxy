@@ -1,5 +1,6 @@
 """nooie's cloud rest api: sign in, pick the camera, open a webrtc session."""
 
+import json
 import base64
 import hashlib
 import hmac
@@ -231,6 +232,12 @@ async def login(http: aiohttp.ClientSession) -> Config:
     config, devices = await signed_in(http)
     camera = await select_camera(devices)
     log(f"selected camera {camera['type']}")
+    # debug build: the camera's own record, to see which call path it offers.
+    shown = {
+        k: ("***" if any(w in str(k).lower() for w in ("token", "secret", "key", "password", "mac", "ip", "wifi", "ssid")) else v)
+        for k, v in camera.items()
+    }
+    log(f"camera record: {json.dumps(shown, ensure_ascii=False)[:1500]}")
     return replace(
         config, device_id=str(camera["uuid"]), model_id=str(camera["type"])
     )
