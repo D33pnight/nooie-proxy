@@ -200,6 +200,7 @@ async def stream(config: Config, target: str) -> None:
                 heartbeat=20,
             ) as websocket:
                 session = await cloud.create_session(http, config)
+                log(f"session: {_redacted(session)}")
                 await place_call(config, session, websocket, target)
         except aiohttp.WSServerHandshakeError as error:
             # this exception carries the request headers, api_token and all;
@@ -280,6 +281,8 @@ async def place_call(
             )
             if message is False:
                 raise RuntimeError("signalling closed during the handshake")
+            if message is not None:
+                log(f"signal in: {_redacted(message)}")
             found = signalling.matching_signal(
                 message, call.call_id, session["session_id"]
             )
@@ -344,6 +347,32 @@ async def place_call(
                 f"call ended after {time.monotonic() - streaming:.0f} s of "
                 f"streaming: {ending.why or 'an unknown cause'}"
             )
+
+
+SECRET = ("token", "password", "secret", "username", "key", "sdp", "candidate")
+
+
+def _redacted(value: Any, limit: int = 600) -> str:
+    """a frame for the debug log, without credentials and cut to size."""
+
+    def scrub(item: Any) -> Any:
+        if isinstance(item, str):
+            try:
+                inner = json.loads(item)
+            except (json.JSONDecodeError, TypeError):
+                return item
+            return scrub(inner) if isinstance(inner, (dict, list)) else item
+        if isinstance(item, dict):
+            return {
+                k: "***" if any(w in str(k).lower() for w in SECRET) else scrub(v)
+                for k, v in item.items()
+            }
+        if isinstance(item, list):
+            return [scrub(v) for v in item]
+        return item
+
+    text = json.dumps(scrub(value), ensure_ascii=False, separators=(",", ":"))
+    return text if len(text) <= limit else text[:limit] + "..."
 
 
 async def receive(
